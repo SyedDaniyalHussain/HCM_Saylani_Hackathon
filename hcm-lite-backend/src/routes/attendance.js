@@ -1,0 +1,13 @@
+import { Router } from 'express';
+import Attendance from '../models/Attendance.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { sendData, parsePagination } from '../utils/http.js';
+import { resolveEmployee } from '../utils/resolveEmployee.js';
+const router = Router();
+const fmt = (d) => d ? new Date(d).toISOString().slice(0,10) : '';
+const serialize = (x) => ({ ...x, id: String(x._id), employeeId: x.employee?.employeeId || '', employee: x.employee?.name || '', department: x.employee?.department || '', date: fmt(x.date) });
+router.get('/', asyncHandler(async(req,res)=>{ const {page,limit,skip}=parsePagination(req); const f={}; if(req.query.date)f.date={$gte:new Date(`${req.query.date}T00:00:00.000Z`),$lt:new Date(`${req.query.date}T23:59:59.999Z`)}; if(req.query.status&&req.query.status!=='All')f.status=req.query.status; const [rows,total]=await Promise.all([Attendance.find(f).populate('employee','name department employeeId').sort({date:-1,createdAt:-1}).skip(skip).limit(limit),Attendance.countDocuments(f)]); let data=rows.map(serialize); if(req.query.search)data=data.filter(x=>`${x.employee} ${x.department}`.toLowerCase().includes(String(req.query.search).toLowerCase())); res.json({success:true,data,meta:{page,limit,total,pages:Math.ceil(total/limit)}}); }));
+router.post('/', asyncHandler(async(req,res)=>{const emp=await resolveEmployee(req.body.employeeId||req.body.employee); if(!emp)return res.status(400).json({success:false,message:'A valid employeeId or employee name is required'}); const date=new Date(`${req.body.date || new Date().toISOString().slice(0,10)}T00:00:00.000Z`); const item=await Attendance.create({employee:emp._id,date,checkIn:req.body.checkIn,checkOut:req.body.checkOut,status:req.body.status,notes:req.body.notes}); await item.populate('employee','name department employeeId'); return sendData(res,serialize(item),201);}));
+router.patch('/:id',asyncHandler(async(req,res)=>{const item=await Attendance.findByIdAndUpdate(req.params.id,req.body,{new:true,runValidators:true}).populate('employee','name department employeeId');if(!item)return res.status(404).json({success:false,message:'Attendance record not found'});return sendData(res,serialize(item));}));
+router.delete('/:id',asyncHandler(async(req,res)=>{const item=await Attendance.findByIdAndDelete(req.params.id);if(!item)return res.status(404).json({success:false,message:'Attendance record not found'});return sendData(res,{message:'Attendance record deleted'});}));
+export default router;

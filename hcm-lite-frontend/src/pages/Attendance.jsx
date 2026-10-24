@@ -1,0 +1,20 @@
+import { useMemo, useState } from "react";
+import { CalendarCheck, Download, Search, Clock3, UserCheck, UserX, Timer } from "lucide-react";
+import StatusBadge from "../components/StatusBadge";
+import SectionTitle from "../components/SectionTitle";
+import { readStore, writeStore, seedAttendance } from "../data";
+
+export default function Attendance() {
+  const [items,setItems] = useState(() => readStore("hcm_attendance",seedAttendance));
+  const [query,setQuery] = useState("");
+  const [filter,setFilter] = useState("All");
+  const [date,setDate] = useState("2026-10-26");
+  const filtered = useMemo(() => items.filter(x => (`${x.employee} ${x.department}`).toLowerCase().includes(query.toLowerCase()) && (filter === "All" || x.status === filter)),[items,query,filter]);
+  const changeStatus = (id,status) => { const next = items.map(x => x.id === id ? {...x,status} : x); setItems(next); writeStore("hcm_attendance",next); };
+  const exportData = () => { const csv = [["Employee","Department","Check in","Check out","Status"],...filtered.map(x => [x.employee,x.department,x.checkIn,x.checkOut,x.status])].map(r => r.join(",")).join("\n"); const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); const a=document.createElement("a");a.href=url;a.download="attendance.csv";a.click();URL.revokeObjectURL(url); };
+  return <div className="page-stack">
+    <div className="stat-grid compact-stats"><div className="mini-stat"><div className="stat-icon mint"><UserCheck size={18}/></div><span>Present</span><strong>{items.filter(x=>x.status==="Present").length}</strong><small>On time or checked in</small></div><div className="mini-stat"><div className="stat-icon orange"><Timer size={18}/></div><span>Late arrivals</span><strong>{items.filter(x=>x.status==="Late").length}</strong><small>Needs attention</small></div><div className="mini-stat"><div className="stat-icon blue"><Clock3 size={18}/></div><span>On leave</span><strong>{items.filter(x=>x.status==="On leave").length}</strong><small>Approved time off</small></div><div className="mini-stat"><div className="stat-icon violet"><UserX size={18}/></div><span>Absent</span><strong>{items.filter(x=>x.status==="Absent").length}</strong><small>Not checked in</small></div></div>
+    <section className="panel table-panel"><SectionTitle title="Daily attendance" subtitle="Review employee attendance and working hours."/><div className="table-toolbar"><label className="table-search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search employees..."/></label><div className="filter-group"><CalendarCheck size={16}/><input type="date" value={date} onChange={e=>setDate(e.target.value)} aria-label="Attendance date"/></div><div className="filter-group"><select value={filter} onChange={e=>setFilter(e.target.value)} aria-label="Filter attendance"><option>All</option>{["Present","Late","Absent","On leave"].map(x=><option key={x}>{x}</option>)}</select></div><button className="btn btn-secondary btn-small" onClick={exportData}><Download size={15}/> Export</button></div>
+    <div className="table-scroll"><table className="data-table"><thead><tr><th>EMPLOYEE</th><th>DEPARTMENT</th><th>CHECK IN</th><th>CHECK OUT</th><th>STATUS</th><th>UPDATE STATUS</th></tr></thead><tbody>{filtered.map((x,i)=><tr key={x.id}><td><div className="employee-cell"><div className={`avatar avatar-${i%5}`}>{x.employee.split(" ").map(n=>n[0]).join("")}</div><div><strong>{x.employee}</strong><span>Employee</span></div></div></td><td>{x.department}</td><td>{x.checkIn}</td><td>{x.checkOut}</td><td><StatusBadge status={x.status}/></td><td><select className="inline-select" value={x.status} onChange={e=>changeStatus(x.id,e.target.value)} aria-label={`Update ${x.employee} status`}>{["Present","Late","Absent","On leave"].map(s=><option key={s}>{s}</option>)}</select></td></tr>)}</tbody></table></div><div className="table-footer"><span>{filtered.length} records for {new Date(`${date}T12:00:00`).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</span><span className="demo-note">Demo attendance data</span></div></section>
+  </div>;
+}

@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import Employee from '../models/Employee.js';
+import Attendance from '../models/Attendance.js';
+import Leave from '../models/Leave.js';
+import Payroll from '../models/Payroll.js';
+import Announcement from '../models/Announcement.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+const router=Router();
+router.get('/',asyncHandler(async(req,res)=>{const date=req.query.date||new Date().toISOString().slice(0,10);const start=new Date(`${date}T00:00:00.000Z`),end=new Date(`${date}T23:59:59.999Z`);const month=req.query.month||date.slice(0,7);const [totalEmployees,activeEmployees,present,late,absent,onLeave,pendingLeaves,approvedLeaves,paidPayroll,announcements,recentEmployees,recentLeaves]=await Promise.all([Employee.countDocuments(),Employee.countDocuments({status:'Active'}),Attendance.countDocuments({date:{$gte:start,$lte:end},status:'Present'}),Attendance.countDocuments({date:{$gte:start,$lte:end},status:'Late'}),Attendance.countDocuments({date:{$gte:start,$lte:end},status:'Absent'}),Attendance.countDocuments({date:{$gte:start,$lte:end},status:'On leave'}),Leave.countDocuments({status:'Pending'}),Leave.countDocuments({status:'Approved'}),Payroll.aggregate([{$match:{month,status:{$in:['Processed','Paid']}}},{$group:{_id:null,total:{$sum:'$netSalary'}}}]),Announcement.countDocuments(),Employee.find().sort({createdAt:-1}).limit(5).select('employeeId name role department status joined'),Leave.find().populate('employee','name employeeId').sort({createdAt:-1}).limit(5)]);res.json({success:true,data:{date,month,employees:{total:totalEmployees,active:activeEmployees},attendance:{present,late,absent,onLeave},leaves:{pending:pendingLeaves,approved:approvedLeaves},payroll:{month,total:paidPayroll[0]?.total||0},announcements:announcements,recentEmployees:recentEmployees.map(e=>({id:e.employeeId,name:e.name,role:e.role,department:e.department,status:e.status,joined:e.joined})),recentLeaves:recentLeaves.map(l=>({id:l.leaveId||String(l._id),employee:l.employee?.name||'',type:l.type,status:l.status,from:l.from,to:l.to,days:l.days}))}});}));
+export default router;

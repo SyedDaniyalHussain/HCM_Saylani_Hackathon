@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import Announcement from '../models/Announcement.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { sendData, parsePagination } from '../utils/http.js';
+const router=Router();
+router.get('/',asyncHandler(async(req,res)=>{const {page,limit,skip}=parsePagination(req);const f={};if(req.query.category&&req.query.category!=='All')f.category=req.query.category;const [data,total]=await Promise.all([Announcement.find(f).sort({date:-1,createdAt:-1}).skip(skip).limit(limit),Announcement.countDocuments(f)]);res.json({success:true,data:data.map(x=>({...x.toObject(),id:String(x._id),date:x.date.toISOString().slice(0,10)})),meta:{page,limit,total,pages:Math.ceil(total/limit)}});}));
+router.post('/',asyncHandler(async(req,res)=>sendData(res,await Announcement.create(req.body),201)));
+router.patch('/:id',asyncHandler(async(req,res)=>{const item=await Announcement.findByIdAndUpdate(req.params.id,req.body,{new:true,runValidators:true});if(!item)return res.status(404).json({success:false,message:'Announcement not found'});return sendData(res,item);}));
+router.delete('/:id',asyncHandler(async(req,res)=>{const item=await Announcement.findByIdAndDelete(req.params.id);if(!item)return res.status(404).json({success:false,message:'Announcement not found'});return sendData(res,{message:'Announcement deleted'});}));
+export default router;
